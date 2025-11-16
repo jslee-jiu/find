@@ -1,3 +1,4 @@
+// app/api/reports/[id]/route.ts
 import PDFDocument from "pdfkit";
 import { supabase } from "@/lib/supabase";
 import type { ExportRequest } from "@/lib/types";
@@ -70,7 +71,18 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   const id = params.id;
-  const { data, error } = await supabase
+
+  // ✅ Supabase 없으면 바로 에러 응답 (빌드는 통과)
+  if (!supabase) {
+    return new Response(
+      JSON.stringify({
+        error: "Supabase가 설정되지 않아 리포트를 생성할 수 없습니다."
+      }),
+      { status: 500, headers: { "Content-Type": "application/json" } }
+    );
+  }
+
+  const { data, error } = await supabase!
     .from("export_requests")
     .select("*")
     .eq("id", id)
@@ -86,8 +98,9 @@ export async function GET(
   const reqData = data as ExportRequest;
   const buffer = await createPdfBuffer(reqData);
 
-  // Buffer -> Uint8Array로 변환 (Response가 이해할 수 있는 타입)
+  // Buffer -> Uint8Array로 변환해서 Response에 넣기
   const uint8 = new Uint8Array(buffer);
+
   return new Response(uint8, {
     status: 200,
     headers: {
