@@ -1,3 +1,4 @@
+// lib/pdf.ts
 import type { ExportRequest } from "./types";
 
 export async function generateBuyerPdfUrl(
@@ -5,6 +6,7 @@ export async function generateBuyerPdfUrl(
 ): Promise<{ pdfUrl: string }> {
   const base =
     process.env.NEXT_PUBLIC_APP_BASE_URL ?? "http://localhost:3000";
+
   return {
     pdfUrl: `${base}/api/reports/${req.id}`
   };
