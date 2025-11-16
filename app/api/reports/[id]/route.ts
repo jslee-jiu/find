@@ -87,7 +87,7 @@ export async function GET(
   const buffer = await createPdfBuffer(reqData);
 
   // Buffer -> Uint8Array로 변환 (Response가 이해할 수 있는 타입)
-  const uint8 = new Uint8Array(buffer as ArrayBufferLike);
+  const uint8 = new Uint8Array(buffer);
   return new Response(buffer, {
     status: 200,
     headers: {
