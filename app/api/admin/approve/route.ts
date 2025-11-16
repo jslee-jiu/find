@@ -14,7 +14,7 @@ export async function POST(req: Request) {
       adminNotes?: string;
     };
 
-    // Supabase env 없으면 빌드 통과용 — 안전하게 에러 반환
+    // ✅ Supabase 환경 없으면 여기서 바로 종료
     if (!supabase) {
       console.error("Supabase가 설정되지 않았습니다.");
       return NextResponse.json(
@@ -23,7 +23,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // 요청 존재 확인
+    // 기존 요청 조회
     const { data: existing, error: fetchError } = await supabase!
       .from("export_requests")
       .select("*")
@@ -31,59 +31,83 @@ export async function POST(req: Request) {
       .single();
 
     if (fetchError || !existing) {
+      console.error(fetchError);
       return NextResponse.json(
-        { error: "요청을 찾을 수 없습니다." },
+        { error: "해당 요청을 찾을 수 없습니다." },
         { status: 404 }
       );
     }
 
+    const current = existing as ExportRequest;
+
+    // ✅ 반려인 경우
     if (!approve) {
-      // 반려 처리
-      await supabase!
+      const { error: updateError } = await supabase!
         .from("export_requests")
         .update({
-          status: "rejected",
-          adminNotes: adminNotes ?? "",
+          status: "REJECTED", // 타입 정의랑 맞추기 (대문자)
+          adminNotes: adminNotes ?? current.adminNotes
         })
         .eq("id", id);
 
-      return NextResponse.json({ success: true });
+      if (updateError) {
+        console.error(updateError);
+        return NextResponse.json(
+          { error: "반려 처리 중 오류가 발생했습니다." },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({ ok: true, status: "REJECTED" });
     }
 
-    // 승인 처리
+    // ✅ 승인인 경우
     const { data: updated, error: updateError } = await supabase!
       .from("export_requests")
       .update({
-        status: "approved",
-        adminNotes: adminNotes ?? "",
+        status: "APPROVED",
+        adminNotes: adminNotes ?? current.adminNotes
       })
       .eq("id", id)
       .select()
       .single();
 
-    if (updateError) {
+    if (updateError || !updated) {
       console.error(updateError);
       return NextResponse.json(
-        { error: "승인 처리 중 오류 발생." },
+        { error: "승인 처리 중 오류가 발생했습니다." },
         { status: 500 }
       );
     }
 
-    // PDF URL 생성
-    const pdfUrl = generateBuyerPdfUrl(id);
+    const updatedReq = updated as ExportRequest;
 
-    // 메일 발송 (Resend 없으면 내부에서 콘솔 로그로 대체)
+    // ✅ PDF URL 생성 (ExportRequest 전체를 넘김)
+    const { pdfUrl } = await generateBuyerPdfUrl(updatedReq);
+
+    // ✅ 사용자에게 메일 발송 (Resend 키 없으면 내부에서 콘솔 로그만 찍음)
     await sendMail({
-      to: updated.email,
-      subject: "바이어 리스트 및 안내서",
-      text: `승인이 완료되었습니다. PDF 링크: ${pdfUrl}`,
+      to: updatedReq.contactEmail,
+      subject: "[ExportBuyer.AI] 수출 바이어 리포트 및 메일 템플릿",
+      html: `
+        <p>${updatedReq.contactName}님,</p>
+        <p>수출 바이어 리스트 리포트와 영문 메일 초안을 준비했습니다.</p>
+        <p><a href="${pdfUrl}">바이어 리스트 PDF 다운로드</a></p>
+        <p><strong>영문 메일 초안:</strong></p>
+        <pre>${updatedReq.aiMailDraft}</pre>
+        <p>감사합니다.<br/>ExportBuyer.AI</p>
+      `
     });
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({
+      ok: true,
+      status: "APPROVED",
+      pdfUrl
+    });
   } catch (err) {
     console.error(err);
     return NextResponse.json(
-      { error: "서버 오류 발생" },
+      { error: "승인 처리 중 서버 오류가 발생했습니다." },
       { status: 500 }
     );
   }
