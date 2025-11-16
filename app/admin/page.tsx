@@ -13,7 +13,10 @@ type ExportRequestItem = {
   aiBuyerListDraft?: string | null;
   aiMailDraft?: string | null;
   adminNotes?: string | null;
+  createdAt?: string;
 };
+
+type FilterType = "PENDING" | "ALL";
 
 export default function AdminPage() {
   const [requests, setRequests] = useState<ExportRequestItem[]>([]);
@@ -21,30 +24,43 @@ export default function AdminPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [adminNotes, setAdminNotes] = useState("");
+  const [filter, setFilter] = useState<FilterType>("PENDING");
+
+  async function load() {
+    try {
+      setLoading(true);
+      setErrorMsg(null);
+
+      const res = await fetch("/api/admin/requests");
+      const json = await res.json();
+
+      const list: ExportRequestItem[] = json.requests ?? [];
+
+      // createdAt 기준 정렬 (최신이 위로 오도록)
+      list.sort((a, b) => {
+        const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return tb - ta;
+      });
+
+      setRequests(list);
+    } catch (err) {
+      console.error(err);
+      setErrorMsg("요청 목록을 불러오지 못했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    async function load() {
-      try {
-        setLoading(true);
-        setErrorMsg(null);
-
-        const res = await fetch("/api/admin/requests");
-        const json = await res.json();
-
-        // 우리가 확인한 JSON 구조: { requests: [...] }
-        setRequests(json.requests ?? []);
-      } catch (err) {
-        console.error(err);
-        setErrorMsg("요청 목록을 불러오지 못했습니다.");
-      } finally {
-        setLoading(false);
-      }
-    }
-
     load();
   }, []);
 
   const selected = requests.find((r) => r.id === selectedId) ?? null;
+
+  const visibleRequests = requests.filter((r) =>
+    filter === "ALL" ? true : r.status === "PENDING"
+  );
 
   async function handleApprove(approve: boolean) {
     if (!selected) return;
@@ -68,10 +84,8 @@ export default function AdminPage() {
 
       alert(approve ? "승인 완료" : "반려 완료");
 
-      // 상태 갱신을 위해 목록 다시 불러오기
-      const listRes = await fetch("/api/admin/requests");
-      const listJson = await listRes.json();
-      setRequests(listJson.requests ?? []);
+      // ✅ 서버에서 다시 목록 가져와서 상태 반영
+      await load();
       setSelectedId(null);
       setAdminNotes("");
     } catch (err) {
@@ -82,17 +96,68 @@ export default function AdminPage() {
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 16 }}>
-      {/* 왼쪽: 요청 리스트 */}
+      {/* 왼쪽: 요청 리스트 + 필터/새로고침 */}
       <div style={{ background: "white", padding: 16, borderRadius: 8 }}>
         <h2>요청 목록</h2>
+
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            marginBottom: 8,
+            alignItems: "center"
+          }}
+        >
+          <button
+            onClick={() => setFilter("PENDING")}
+            style={{
+              padding: "6px 10px",
+              borderRadius: 6,
+              border: filter === "PENDING" ? "2px solid #2563eb" : "1px solid #d1d5db",
+              backgroundColor: filter === "PENDING" ? "#eff6ff" : "white",
+              cursor: "pointer",
+              fontSize: 13
+            }}
+          >
+            대기중만
+          </button>
+          <button
+            onClick={() => setFilter("ALL")}
+            style={{
+              padding: "6px 10px",
+              borderRadius: 6,
+              border: filter === "ALL" ? "2px solid #2563eb" : "1px solid #d1d5db",
+              backgroundColor: filter === "ALL" ? "#eff6ff" : "white",
+              cursor: "pointer",
+              fontSize: 13
+            }}
+          >
+            전체
+          </button>
+          <button
+            onClick={load}
+            style={{
+              marginLeft: "auto",
+              padding: "6px 10px",
+              borderRadius: 6,
+              border: "1px solid #d1d5db",
+              backgroundColor: "white",
+              cursor: "pointer",
+              fontSize: 13
+            }}
+          >
+            새로고침
+          </button>
+        </div>
+
         {loading && <p>불러오는 중...</p>}
         {errorMsg && <p style={{ color: "red" }}>{errorMsg}</p>}
-        {!loading && !errorMsg && requests.length === 0 && (
-          <p>요청이 없습니다.</p>
+        {!loading && !errorMsg && visibleRequests.length === 0 && (
+          <p>표시할 요청이 없습니다.</p>
         )}
 
         <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-          {requests.map((r) => (
+          {visibleRequests.map((r) => (
             <li
               key={r.id}
               style={{
