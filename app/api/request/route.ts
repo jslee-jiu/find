@@ -1,3 +1,4 @@
+// app/api/request/route.ts
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 import type { ExportRequest } from "@/lib/types";
@@ -6,6 +7,15 @@ import { generateBuyerListAndMailDraft } from "@/lib/ai";
 export async function POST(req: Request) {
   try {
     const body = await req.json();
+
+    // ✅ Supabase 설정 안 되어 있으면 바로 에러 응답
+    if (!supabase) {
+      console.error("Supabase가 설정되지 않았습니다.");
+      return NextResponse.json(
+        { error: "서버 DB가 아직 설정되지 않았습니다." },
+        { status: 500 }
+      );
+    }
 
     const base: Omit<ExportRequest, "id" | "createdAt" | "status"> = {
       companyName: body.companyName,
@@ -24,6 +34,7 @@ export async function POST(req: Request) {
       adminNotes: ""
     };
 
+    // ✅ OpenAI로 바이어 리스트 + 메일 초안 생성 (키 없으면 더미 동작)
     const { buyerListDraft, mailDraft } =
       await generateBuyerListAndMailDraft(base);
 
@@ -45,7 +56,7 @@ export async function POST(req: Request) {
       adminNotes: base.adminNotes
     };
 
-    const { data, error } = await supabase
+    const { data, error } = await supabase!
       .from("export_requests")
       .insert([insertData])
       .select()
