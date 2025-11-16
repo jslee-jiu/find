@@ -4,7 +4,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-// env가 없으면 null, 있으면 진짜 클라이언트
+// env가 없으면 null, 있으면 실제 client
 let supabase: SupabaseClient | null = null;
 
 if (supabaseUrl && supabaseKey) {
