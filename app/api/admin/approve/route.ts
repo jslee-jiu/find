@@ -1,3 +1,4 @@
+// app/api/admin/approve/route.ts
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 import { generateBuyerPdfUrl } from "@/lib/pdf";
@@ -13,7 +14,17 @@ export async function POST(req: Request) {
       adminNotes?: string;
     };
 
-    const { data: existing, error: fetchError } = await supabase
+    // Supabase env 없으면 빌드 통과용 — 안전하게 에러 반환
+    if (!supabase) {
+      console.error("Supabase가 설정되지 않았습니다.");
+      return NextResponse.json(
+        { error: "서버 DB가 아직 설정되지 않았습니다." },
+        { status: 500 }
+      );
+    }
+
+    // 요청 존재 확인
+    const { data: existing, error: fetchError } = await supabase!
       .from("export_requests")
       .select("*")
       .eq("id", id)
@@ -21,72 +32,58 @@ export async function POST(req: Request) {
 
     if (fetchError || !existing) {
       return NextResponse.json(
-        { error: "해당 요청을 찾을 수 없습니다." },
+        { error: "요청을 찾을 수 없습니다." },
         { status: 404 }
       );
     }
 
-    const current = existing as ExportRequest;
-
     if (!approve) {
-      const { error: updateError } = await supabase
+      // 반려 처리
+      await supabase!
         .from("export_requests")
         .update({
-          status: "REJECTED",
-          adminNotes: adminNotes ?? current.adminNotes
+          status: "rejected",
+          adminNotes: adminNotes ?? "",
         })
         .eq("id", id);
 
-      if (updateError) {
-        console.error(updateError);
-        return NextResponse.json(
-          { error: "반려 처리 중 오류가 발생했습니다." },
-          { status: 500 }
-        );
-      }
-
-      return NextResponse.json({ ok: true, status: "REJECTED" });
+      return NextResponse.json({ success: true });
     }
 
-    const { error: updateError, data: updated } = await supabase
+    // 승인 처리
+    const { data: updated, error: updateError } = await supabase!
       .from("export_requests")
       .update({
-        status: "APPROVED",
-        adminNotes: adminNotes ?? current.adminNotes
+        status: "approved",
+        adminNotes: adminNotes ?? "",
       })
       .eq("id", id)
       .select()
       .single();
 
-    if (updateError || !updated) {
+    if (updateError) {
       console.error(updateError);
       return NextResponse.json(
-        { error: "승인 처리 중 오류가 발생했습니다." },
+        { error: "승인 처리 중 오류 발생." },
         { status: 500 }
       );
     }
 
-    const updatedReq = updated as ExportRequest;
-    const { pdfUrl } = await generateBuyerPdfUrl(updatedReq);
+    // PDF URL 생성
+    const pdfUrl = generateBuyerPdfUrl(id);
 
+    // 메일 발송 (Resend 없으면 내부에서 콘솔 로그로 대체)
     await sendMail({
-      to: updatedReq.contactEmail,
-      subject: "[ExportBuyer.AI] 수출 바이어 리포트 및 메일 템플릿",
-      html: `
-        <p>${updatedReq.contactName}님,</p>
-        <p>수출 바이어 리스트 리포트와 영문 메일 초안을 준비했습니다.</p>
-        <p><a href="${pdfUrl}">바이어 리스트 PDF 다운로드</a></p>
-        <p><strong>영문 메일 초안:</strong></p>
-        <pre>${updatedReq.aiMailDraft}</pre>
-        <p>감사합니다.<br/>ExportBuyer.AI</p>
-      `
+      to: updated.email,
+      subject: "바이어 리스트 및 안내서",
+      text: `승인이 완료되었습니다. PDF 링크: ${pdfUrl}`,
     });
 
-    return NextResponse.json({ ok: true, status: "APPROVED", pdfUrl });
+    return NextResponse.json({ success: true });
   } catch (err) {
     console.error(err);
     return NextResponse.json(
-      { error: "승인 처리 중 오류가 발생했습니다." },
+      { error: "서버 오류 발생" },
       { status: 500 }
     );
   }
