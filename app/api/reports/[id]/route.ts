@@ -88,7 +88,7 @@ export async function GET(
 
   // Buffer -> Uint8Array로 변환 (Response가 이해할 수 있는 타입)
   const uint8 = new Uint8Array(buffer);
-  return new Response(buffer, {
+  return new Response(uint8, {
     status: 200,
     headers: {
       "Content-Type": "application/pdf",
