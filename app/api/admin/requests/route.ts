@@ -1,8 +1,9 @@
+// app/api/admin/requests/route.ts
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 
 export async function GET() {
-  // Supabase 환경변수가 아직 없으면 -> 그냥 빈 리스트 반환 (빌드용 / 데모용)
+  // Supabase env 없으면 빌드 통과용 — 빈 리스트 반환
   if (!supabase) {
     return NextResponse.json({ requests: [] });
   }
