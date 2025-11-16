@@ -1,17 +1,14 @@
-// app/api/admin/requests/route.ts
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 
 export async function GET() {
-  // Supabase env 없으면 빌드 통과용 — 빈 리스트 반환
   if (!supabase) {
     return NextResponse.json({ requests: [] });
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await supabase!
     .from("export_requests")
-    .select("*")
-    .order("createdAt", { ascending: false });
+    .select("*"); // ← order 날리고 그냥 전체 가져오기
 
   if (error) {
     console.error(error);
